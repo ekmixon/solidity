@@ -32,28 +32,13 @@
 #include <boost/algorithm/string.hpp>
 
 #include <algorithm>
+#include <regex>
 
 using namespace std;
 using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::langutil;
 using namespace solidity::yul;
-
-namespace
-{
-
-[[nodiscard]]
-shared_ptr<DebugData const> updateLocationEndFrom(
-	shared_ptr<DebugData const> const& _debugData,
-	langutil::SourceLocation const& _location
-)
-{
-	SourceLocation updatedLocation = _debugData->location;
-	updatedLocation.end = _location.end;
-	return make_shared<DebugData const>(updatedLocation);
-}
-
-}
 
 unique_ptr<Block> Parser::parse(std::shared_ptr<Scanner> const& _scanner, bool _reuseScanner)
 {
@@ -65,6 +50,7 @@ unique_ptr<Block> Parser::parse(std::shared_ptr<Scanner> const& _scanner, bool _
 	try
 	{
 		m_scanner = _scanner;
+		updateLocation();
 		auto block = make_unique<Block>(parseBlock());
 		if (!_reuseScanner)
 			expectToken(Token::EOS);
@@ -76,6 +62,65 @@ unique_ptr<Block> Parser::parse(std::shared_ptr<Scanner> const& _scanner, bool _
 	}
 
 	return nullptr;
+}
+
+langutil::Token Parser::advance()
+{
+	auto const token = ParserBase::advance();
+	updateLocation();
+	return token;
+}
+
+void Parser::updateLocation()
+{
+	if (m_scanner->currentCommentLiteral().empty())
+		return;
+
+	// parse doxygen style comment with a sequence of key/value pairs
+	// TODO: [ ] docflag!
+	// TODO: [x] join regexes into one, hard search for @src
+	// TODO: [x] catch exception on stoi (e.g. too biig number?)
+	// TODO: [ ] updateLocationEndFrom(): pull top if-condition out of it
+
+	static std::regex const lineRE = std::regex(
+		R"~~~(.*@src\s+(\d+):(-1|\d+):(-1|\d+).*)~~~",
+		std::regex_constants::ECMAScript | std::regex_constants::optimize
+	);
+
+	string_view text = m_scanner->currentCommentLiteral();
+	std::cmatch cm;
+	if (!std::regex_search(text.data(), text.data() + text.size(), cm, lineRE))
+		return;
+
+	try
+	{
+		solAssert(cm.size() == 4, "");
+		auto const sourceIndex = static_cast<unsigned>(stoul(cm[1].str()));
+		auto const start = stoi(cm[2].str());
+		auto const end = stoi(cm[3].str());
+
+		solAssert(!!m_charStreamForSourceIndex, "");
+		auto charStream = m_charStreamForSourceIndex(sourceIndex);
+		solAssert(charStream, "");
+
+		m_locationOverride = SourceLocation{start, end, charStream};
+	}
+	catch (std::out_of_range) {}
+}
+
+[[nodiscard]]
+shared_ptr<DebugData const> Parser::updateLocationEndFrom(
+	shared_ptr<DebugData const> const& _debugData,
+	langutil::SourceLocation const& _location
+)
+{
+	if (m_locationOverride)
+		return _debugData;
+
+	SourceLocation updatedLocation = _debugData->location;
+	updatedLocation.end = _location.end;
+
+	return make_shared<DebugData const>(updatedLocation);
 }
 
 Block Parser::parseBlock()
@@ -107,6 +152,7 @@ Statement Parser::parseStatement()
 		advance();
 		_if.condition = make_unique<Expression>(parseExpression());
 		_if.body = parseBlock();
+		_if.debugData = updateLocationEndFrom(_if.debugData, currentLocation());
 		return Statement{move(_if)};
 	}
 	case Token::Switch:
@@ -131,21 +177,21 @@ Statement Parser::parseStatement()
 		return parseForLoop();
 	case Token::Break:
 	{
-		Statement stmt{createWithLocation<Break>()};
+		Break stmt = createWithLocation<Break>();
 		checkBreakContinuePosition("break");
 		advance();
 		return stmt;
 	}
 	case Token::Continue:
 	{
-		Statement stmt{createWithLocation<Continue>()};
+		Continue stmt = createWithLocation<Continue>();
 		checkBreakContinuePosition("continue");
 		advance();
 		return stmt;
 	}
 	case Token::Leave:
 	{
-		Statement stmt{createWithLocation<Leave>()};
+		Leave stmt = createWithLocation<Leave>();
 		if (!m_insideFunction)
 			m_errorReporter.syntaxError(8149_error, currentLocation(), "Keyword \"leave\" can only be used inside a function.");
 		advance();
@@ -509,3 +555,4 @@ bool Parser::isValidNumberLiteral(string const& _literal)
 	else
 		return _literal.find_first_not_of("0123456789") == string::npos;
 }
+

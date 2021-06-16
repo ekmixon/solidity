@@ -31,6 +31,7 @@
 #include <liblangutil/Scanner.h>
 #include <liblangutil/ParserBase.h>
 
+#include <functional>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -46,13 +47,19 @@ public:
 		None, ForLoopPre, ForLoopPost, ForLoopBody
 	};
 
+	/// Constructs a Yul parser.
+	///
+	/// @p _charStreamForSourceIndex a callback for retrieving the CharStream related to a source
+	///                              index (see \@src-parsing).
 	explicit Parser(
 		langutil::ErrorReporter& _errorReporter,
 		Dialect const& _dialect,
-		std::optional<langutil::SourceLocation> _locationOverride = {}
+		std::optional<langutil::SourceLocation> _locationOverride = {},
+		std::function<std::shared_ptr<langutil::CharStream>(unsigned)> _charStreamForSourceIndex = {}
 	):
 		ParserBase(_errorReporter),
 		m_dialect(_dialect),
+		m_charStreamForSourceIndex{std::move((_charStreamForSourceIndex))},
 		m_locationOverride(std::move(_locationOverride))
 	{}
 
@@ -62,10 +69,28 @@ public:
 	std::unique_ptr<Block> parse(std::shared_ptr<langutil::Scanner> const& _scanner, bool _reuseScanner);
 
 protected:
+	std::tuple<langutil::SourceLocation, bool> currentOverridableLocation() const
+	{
+		auto resutl = std::tuple<langutil::SourceLocation, bool>{};
+		if (m_locationOverride)
+			return {*m_locationOverride, false};
+		return {ParserBase::currentLocation(), false};
+	}
+
 	langutil::SourceLocation currentLocation() const override
 	{
 		return m_locationOverride ? *m_locationOverride : ParserBase::currentLocation();
 	}
+
+	langutil::Token advance() override;
+
+	void updateLocation();
+
+	[[nodiscard]]
+	std::shared_ptr<DebugData const> updateLocationEndFrom(
+		std::shared_ptr<DebugData const> const& _debugData,
+		langutil::SourceLocation const& _location
+	);
 
 	/// Creates an inline assembly node with the current source location.
 	template <class T> T createWithLocation() const
@@ -97,6 +122,8 @@ protected:
 
 private:
 	Dialect const& m_dialect;
+	/// Used to retrieve the corresponding CharStream based on its source index, as used in @src doxy-style comments.
+	std::function<std::shared_ptr<langutil::CharStream>(unsigned)> m_charStreamForSourceIndex;
 	std::optional<langutil::SourceLocation> m_locationOverride;
 	ForLoopComponent m_currentForLoopComponent = ForLoopComponent::None;
 	bool m_insideFunction = false;
