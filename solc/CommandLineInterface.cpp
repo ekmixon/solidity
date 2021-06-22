@@ -1037,7 +1037,7 @@ General Information)").c_str(),
 		)
 		(
 			g_argOptimizeRuns.c_str(),
-			po::value<unsigned>()->value_name("n")->default_value(200),
+			po::value<size_t>()->value_name("n")->default_value(200),
 			"Set for how many contract runs to optimize. "
 			"Lower values will optimize more for initial deployment cost, higher values will optimize more for high-frequency usage."
 		)
@@ -1501,7 +1501,7 @@ bool CommandLineInterface::processInput()
 		m_compiler->enableEwasmGeneration(m_args.count(g_argEwasm));
 
 		OptimiserSettings settings = m_args.count(g_argOptimize) ? OptimiserSettings::standard() : OptimiserSettings::minimal();
-		settings.expectedExecutionsPerDeployment = m_args[g_argOptimizeRuns].as<unsigned>();
+		settings.expectedExecutionsPerDeployment = m_args[g_argOptimizeRuns].as<size_t>();
 		if (m_args.count(g_strNoOptimizeYul))
 			settings.runYulOptimiser = false;
 		if (m_args.count(g_strYulOptimizations))
