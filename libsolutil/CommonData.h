@@ -145,6 +145,11 @@ inline std::multiset<T...>& operator-=(std::multiset<T...>& _a, C const& _b)
 namespace solidity::util
 {
 
+enum class StringEscaping {
+	Solidity,
+	Yul,
+};
+
 /// Functional map.
 /// Returns a container _oc applying @param _op to each element in @param _c.
 /// By default _oc is a vector.
@@ -554,7 +559,7 @@ std::string formatAsStringOrNumber(std::string const& _value);
 
 /// @returns a string with the usual backslash-escapes for non-ASCII
 /// characters and surrounded by '"'-characters.
-std::string escapeAndQuoteString(std::string const& _input);
+std::string escapeAndQuoteString(std::string const& _input, StringEscaping _escapingStyle);
 
 template<typename Container, typename Compare>
 bool containerEqual(Container const& _lhs, Container const& _rhs, Compare&& _compare)

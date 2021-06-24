@@ -192,11 +192,13 @@ string solidity::util::formatAsStringOrNumber(string const& _value)
 		if (c <= 0x1f || c >= 0x7f || c == '"')
 			return "0x" + h256(_value, h256::AlignLeft).hex();
 
-	return escapeAndQuoteString(_value);
+	// The difference in escaping is only in characters below 0x1f and the string does not have them
+	// so StringEscaping::Solidity would also work here.
+	return escapeAndQuoteString(_value, StringEscaping::Yul);
 }
 
 
-string solidity::util::escapeAndQuoteString(string const& _input)
+string solidity::util::escapeAndQuoteString(string const& _input, StringEscaping _escapingStyle)
 {
 	string out;
 
@@ -205,9 +207,9 @@ string solidity::util::escapeAndQuoteString(string const& _input)
 			out += "\\\\";
 		else if (c == '"')
 			out += "\\\"";
-		else if (c == '\b')
+		else if (c == '\b' && _escapingStyle != StringEscaping::Yul)
 			out += "\\b";
-		else if (c == '\f')
+		else if (c == '\f' && _escapingStyle != StringEscaping::Yul)
 			out += "\\f";
 		else if (c == '\n')
 			out += "\\n";
@@ -215,7 +217,7 @@ string solidity::util::escapeAndQuoteString(string const& _input)
 			out += "\\r";
 		else if (c == '\t')
 			out += "\\t";
-		else if (c == '\v')
+		else if (c == '\v' && _escapingStyle != StringEscaping::Yul)
 			out += "\\v";
 		else if (!isprint(c, locale::classic()))
 		{
