@@ -21,7 +21,7 @@ def extract_test_cases(_path):
 
     for l in lines:
         if inside:
-            if l.strip().endswith(')' + delimiter + '";'):
+            if l.strip().endswith(f'){delimiter}' + '";'):
                 open('%03d_%s.sol' % (ctr, test_name), mode='wb', encoding='utf8').write(test)
                 ctr += 1
                 inside = False
@@ -31,13 +31,11 @@ def extract_test_cases(_path):
                 l = l.replace('\t', '        ')
                 test += l + '\n'
         else:
-            m = re.search(r'BOOST_AUTO_TEST_CASE\(([^(]*)\)', l.strip())
-            if m:
-                test_name = m.group(1)
-            m = re.search(r'R"([^(]*)\($', l.strip())
-            if m:
+            if m := re.search(r'BOOST_AUTO_TEST_CASE\(([^(]*)\)', l.strip()):
+                test_name = m[1]
+            if m := re.search(r'R"([^(]*)\($', l.strip()):
                 inside = True
-                delimiter = m.group(1)
+                delimiter = m[1]
 
 if __name__ == '__main__':
     extract_test_cases(sys.argv[1])

@@ -21,16 +21,14 @@ def extract_test_cases(path):
 
     for l in lines:
         if inside:
-            if l.strip().endswith(')' + delimiter + '";'):
+            if l.strip().endswith(f'){delimiter}' + '";'):
                 inside = False
             else:
                 tests[-1] += l + '\n'
-        else:
-            m = re.search(r'R"([^(]*)\($', l.strip())
-            if m:
-                inside = True
-                delimiter = m.group(1)
-                tests += ['']
+        elif m := re.search(r'R"([^(]*)\($', l.strip()):
+            inside = True
+            delimiter = m[1]
+            tests += ['']
 
     return tests
 
@@ -55,15 +53,16 @@ def extract_docs_cases(path):
             insideBlock = l.startswith(' ')
         if insideBlock:
             if not pastBlockParameters:
-                # NOTE: For simplicity this allows blank lines between block parameters even
-                # though Sphinx does not. This does not matter since the first non-empty line in
-                # a Solidity file cannot start with a colon anyway.
-                if not l.strip().startswith(':') and (l != '' or not insideBlockParameters):
-                    insideBlockParameters = False
-                    pastBlockParameters = True
-                else:
+                if (
+                    l.strip().startswith(':')
+                    or l == ''
+                    and insideBlockParameters
+                ):
                     insideBlockParameters = True
 
+                else:
+                    insideBlockParameters = False
+                    pastBlockParameters = True
             if not insideBlockParameters:
                 extractedLines[-1] += l + '\n'
 
@@ -72,7 +71,7 @@ def extract_docs_cases(path):
     # Filter all tests that do not contain Solidity or are indented incorrectly.
     for lines in extractedLines:
         if re.search(r'^\s{0,3}' + codeStart, lines, re.MULTILINE):
-            print("Indentation error in " + path + ":")
+            print(f"Indentation error in {path}:")
             print(lines)
             exit(1)
         if re.search(r'^\s{4}' + codeStart, lines, re.MULTILINE):
@@ -86,25 +85,22 @@ def write_cases(f, tests):
         # When code examples are extracted they are indented by 8 spaces, which violates the style guide,
         # so before checking remove 4 spaces from each line.
         remainder = re.sub(r'^ {4}', '', test, 0, re.MULTILINE)
-        sol_filename = 'test_%s_%s.sol' % (hashlib.sha256(test.encode("utf-8")).hexdigest(), cleaned_filename)
+        sol_filename = f'test_{hashlib.sha256(test.encode("utf-8")).hexdigest()}_{cleaned_filename}.sol'
+
         open(sol_filename, mode='w', encoding='utf8', newline='').write(remainder)
 
 def extract_and_write(f, path):
     if docs:
         cases = extract_docs_cases(path)
+    elif f.endswith('.sol'):
+        cases = [open(path, mode='r', encoding='utf8', newline='').read()]
     else:
-        if f.endswith('.sol'):
-            cases = [open(path, mode='r', encoding='utf8', newline='').read()]
-        else:
-            cases = extract_test_cases(path)
+        cases = extract_test_cases(path)
     write_cases(f, cases)
 
 if __name__ == '__main__':
     path = sys.argv[1]
-    docs = False
-    if len(sys.argv) > 2 and sys.argv[2] == 'docs':
-        docs = True
-
+    docs = len(sys.argv) > 2 and sys.argv[2] == 'docs'
     if isfile(path):
         extract_and_write(path, path)
     else:

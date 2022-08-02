@@ -77,10 +77,7 @@ class FileReport:
                 return 'E'
             if no_bytecode:
                 return 'B'
-            if no_metadata:
-                return 'M'
-
-            return '.'
+            return 'M' if no_metadata else '.'
 
 
 @dataclass
@@ -97,17 +94,16 @@ class Statistics:
         self.file_count += 1
         self.contract_count += len(contract_reports)
         self.error_count += (1 if report.contract_reports is None else 0)
-        self.missing_bytecode_count += sum(1 for c in contract_reports if c.bytecode is None)
-        self.missing_metadata_count += sum(1 for c in contract_reports if c.metadata is None)
+        self.missing_bytecode_count += sum(
+            c.bytecode is None for c in contract_reports
+        )
+
+        self.missing_metadata_count += sum(
+            c.metadata is None for c in contract_reports
+        )
 
     def __str__(self) -> str:
-        return "test cases: {}, contracts: {}, errors: {}, missing bytecode: {}, missing metadata: {}".format(
-            self.file_count,
-            str(self.contract_count) + ('+' if self.error_count > 0 else ''),
-            self.error_count,
-            self.missing_bytecode_count,
-            self.missing_metadata_count,
-        )
+        return f"test cases: {self.file_count}, contracts: {str(self.contract_count) + ('+' if self.error_count > 0 else '')}, errors: {self.error_count}, missing bytecode: {self.missing_bytecode_count}, missing metadata: {self.missing_metadata_count}"
 
 
 def load_source(path: Union[Path, str], smt_use: SMTUse) -> str:
